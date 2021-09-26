@@ -20,31 +20,56 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 )
 
 func main() {
-	http.HandleFunc("/", rootHandler)
-	http.HandleFunc("/healthz", healthzHandler)
-	log.Fatal(http.ListenAndServe("localhost:8000", nil))
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", rootHandler)
+	mux.HandleFunc("/healthz", healthzHandler)
+	log.Fatal(http.ListenAndServe("localhost:8000", mux))
 }
 
+func getFuncName() string {
+	pc := make([]uintptr, 1)
+	runtime.Callers(2, pc)
+	f := runtime.FuncForPC(pc[0])
+	return f.Name()
+}
+
+// 4.当访问 localhost/healthz 时，应返回200
 func healthzHandler(w http.ResponseWriter, r *http.Request) {
 	response, _ := http.Get("http://localhost:8000")
-	fmt.Fprintf(w, response.Status)
+	_, err := fmt.Fprintf(w, "%d", response.StatusCode)
+	if err != nil {
+		log.Fatal(err)
+	} else {
+		log.Printf("[%s] RemoteAddr=%s, StatusCode=%d", getFuncName(), r.RemoteAddr, response.StatusCode)
+	}
 
 }
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
+	// 1.接收客户端 request，并将 request 中带的 header 写入 response header
+	var frontText []string
+
 	for k, v := range r.Header {
 		w.Header().Add(k, strings.Join(v, " "))
+		frontText = append(frontText, fmt.Sprintf("%s = %s\n", k, v))
 	}
 
+	// 2.读取当前系统的环境变量中的 VERSION 配置，并写入 response header
 	VERSION := os.Getenv("VERSION")
 	w.Header().Add("VERSION", VERSION)
+	frontText = append(frontText, fmt.Sprintf("%s = %s\n", "Version", VERSION))
 
-	log.Printf("RemoteAddr = %s", r.RemoteAddr)
+	_, err := fmt.Fprintf(w, strings.Join(frontText, ""))
+	if err != nil {
+		log.Fatal(err)
+	} else {
+		// 3.Server 端记录访问日志包括客户端 IP，HTTP 返回码，输出到 server 端的标准输出
+		log.Printf("[%s] RemoteAddr=%s, StatusCode=%d", getFuncName(), r.RemoteAddr, http.StatusOK)
+	}
 
 }
-
-//!-handler
