@@ -41,6 +41,8 @@ func getFuncName() string {
 // 4.当访问 localhost/healthz 时，应返回200
 func healthzHandler(w http.ResponseWriter, r *http.Request) {
 	response, _ := http.Get("http://localhost:8000")
+	defer response.Body.Close()
+
 	_, err := fmt.Fprintf(w, "%d", response.StatusCode)
 	if err != nil {
 		log.Fatal(err)
